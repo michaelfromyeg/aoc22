@@ -18,7 +18,7 @@ def value_of(c: str) -> int:
 
 
 def is_valid_neighbour(
-    grid: List[List[str]], u: Tuple[int, int], v: Tuple[int, int]
+    grid: List[List[str]], u: Tuple[int, int], v: Tuple[int, int], mode: bool
 ) -> bool:
     """
     Check if v is a valid neighbour of u in grid.
@@ -29,10 +29,14 @@ def is_valid_neighbour(
     if v_x < 0 or v_x >= len(grid[0]) or v_y < 0 or v_y >= len(grid):
         return False
 
-    return value_of(grid[v_y][v_x]) + 1 >= value_of(grid[u_y][u_x])
+    if mode:
+        return value_of(grid[v_y][v_x]) + 1 >= value_of(grid[u_y][u_x])
+    return value_of(grid[v_y][v_x]) <= value_of(grid[u_y][u_x]) + 1
 
 
-def get_neighbours(grid: List[List[str]], u: Tuple[int, int]) -> List[Tuple[int, int]]:
+def get_neighbours(
+    grid: List[List[str]], u: Tuple[int, int], mode: bool
+) -> List[Tuple[int, int]]:
     """
     Determine valid neighbours of n.
     """
@@ -43,7 +47,7 @@ def get_neighbours(grid: List[List[str]], u: Tuple[int, int]) -> List[Tuple[int,
     candidates = [(u_x - 1, u_y), (u_x + 1, u_y), (u_x, u_y + 1), (u_x, u_y - 1)]
 
     for v in candidates:
-        if is_valid_neighbour(grid, u, v):
+        if is_valid_neighbour(grid, u, v, mode):
             neighbours.append(v)
 
     return neighbours
@@ -55,6 +59,7 @@ def bfs(
     distance_grid: List[List[float]],
     start: Tuple[int, int],
     end: Tuple[int, int],
+    mode: bool,
 ) -> None:
     """
     Perform BFS on a list of nodes.
@@ -66,7 +71,7 @@ def bfs(
     while len(queue) > 0:
         u = queue.pop(0)
 
-        for n in get_neighbours(grid, u):
+        for n in get_neighbours(grid, u, mode):
             if n not in explored:
                 explored.append(n)
                 parent_grid[n[1]][n[0]] = u
@@ -117,6 +122,7 @@ def part1():
         distance_grid=distance_grid,
         start=s,
         end=t,
+        mode=False,
     )
 
     # pprint(parent_grid)
@@ -163,7 +169,7 @@ def part2():
             parent_grid.append(parent_grid_row)
             distance_grid.append(distance_grid_row)
 
-    s = ss[0]
+    # s = ss[0]
 
     bfs(
         grid=grid,
@@ -171,10 +177,12 @@ def part2():
         distance_grid=distance_grid,
         start=t,
         end=(0, 0),
+        mode=True,
     )
 
-    pprint(distance_grid)
+    # pprint(distance_grid)
 
+    # could use ss instead
     mn = float("inf")
     for y, row in enumerate(grid):
         for x, c in enumerate(row):
