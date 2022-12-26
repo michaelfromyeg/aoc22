@@ -1,10 +1,43 @@
 from dataclasses import dataclass
 from typing import List
+from functools import cmp_to_key
+from copy import deepcopy
+
+from pprint import pprint
 
 DEBUG = True
 
+# Note: these types are wrong; they need to depend on
+#       self-reference but can't, even with `from __future__ import annotations`
+
 Composite = List[int] | int
-Packet = List[Composite]
+Packet = List[Composite] | Composite
+
+
+def is_int(c: Composite) -> bool:
+    """
+    Determine if composite type is a list.
+    """
+    return type(c) == int
+
+
+def is_list(c: Composite) -> bool:
+    """
+    Determine if composite type is a list.
+    """
+    return type(c) == list
+
+
+def bool_to_cmp(b: bool | None) -> int:
+    """
+    Convert a boolean value to a cmp-friendly one.
+    """
+    if b is None:
+        return 0
+    elif b is False:
+        return 1
+    else:  # b is True
+        return -1
 
 
 def printf(message, *args):
@@ -85,7 +118,7 @@ def parse_packet(src: str, start: int, cease: int) -> Packet:
     return packet
 
 
-def is_balanced(pair: Pair) -> bool:
+def is_balanced(pair: Pair) -> bool | None:
     """
     Determine if a pair of packets is ordered.
     """
@@ -93,8 +126,20 @@ def is_balanced(pair: Pair) -> bool:
 
     idx = 0
 
-    while True:
-        if type(pair.l[idx]) == int and type(pair.r[idx]) == int:
+    if len(pair.l) == 0 and len(pair.r) == 0:
+        return None
+
+    if len(pair.l) == 0:
+        return True
+
+    if len(pair.r) == 0:
+        return False
+
+    while idx < len(pair.l):
+        if idx >= len(pair.r):
+            return False
+
+        if is_int(pair.l[idx]) and is_int(pair.r[idx]):
             printf("\tboth integers")
             li = pair.l[idx]
             ri = pair.r[idx]
@@ -106,17 +151,60 @@ def is_balanced(pair: Pair) -> bool:
                 printf("\t\tr<l, false")
                 return False
 
+        elif is_list(pair.l[idx]) and is_list(pair.r[idx]):
+            printf("\tboth lists")
+
+            sub_pair = Pair(l=pair.l[idx], r=pair.r[idx])
+
+            retval = is_balanced(sub_pair)
+            if retval is not None:
+                return retval
+
+        elif is_int(pair.l[idx]):
+            printf("\tleft is int")
+
+            copy_pair = deepcopy(pair)
+
+            copy_pair.l[idx] = [copy_pair.l[idx]]
+
+            retval = is_balanced(copy_pair)
+            if retval is not None:
+                return retval
+
+        elif is_int(pair.r[idx]):
+            printf("\tright is int")
+
+            copy_pair = deepcopy(pair)
+
+            copy_pair.r[idx] = [copy_pair.r[idx]]
+
+            retval = is_balanced(copy_pair)
+            if retval is not None:
+                return retval
+
+        else:
+            printf("\tmissed every case?")
+
+            return None
+
         idx = idx + 1
 
-    return True
+    if idx < len(pair.r):
+        return True
+
+    return None
 
 
-def part1() -> None:
-    """ """
+def part1(filename: str) -> None:
+    """
+    Part 1 of AoC day 13.
+
+    https://adventofcode.com/2022/day/13#part1
+    """
 
     pairs: List[Pair] = []
 
-    with open("input-numbers.txt") as f:
+    with open(filename) as f:
         chunk = f.read()
         groups = chunk.split("\n\n")
 
@@ -133,11 +221,61 @@ def part1() -> None:
 
     sum_indices = 0
     for i, pair in enumerate(pairs):
-        if is_balanced(pair):
-            sum_indices = sum_indices + i
+        retval = is_balanced(pair)
 
-    print(sum_indices)
+        if retval is False:
+            printf("\tretval=false")
+        elif retval is None:
+            printf("\tretval=None, equal lists")
+        else:  # if retval is True
+            printf("\tretval=true")
+            sum_indices = sum_indices + (i + 1)
+            printf("\tsum_indices=%d", sum_indices)
+
+    return sum_indices
+
+
+def part2(filename: str) -> None:
+    """
+    Part 2 of AoC day 13.
+
+    https://adventofcode.com/2022/day/13#part2
+    """
+
+    packets: List[Pair] = []
+
+    with open(filename) as f:
+        chunk = f.read()
+        groups = chunk.split("\n\n")
+
+        for group in groups:
+            l, r = group.split("\n")
+
+            packets.append(parse_packet(l, 0, len(l)))
+            packets.append(parse_packet(r, 0, len(r)))
+
+    for packet in packets:
+        printf("packet=%s", packet)
+
+    DIVIDER_A = [[2]]
+    DIVIDER_B = [[6]]
+
+    packets.append(DIVIDER_A)
+    packets.append(DIVIDER_B)
+
+    sorted_p = list(
+        sorted(
+            packets,
+            key=cmp_to_key(lambda l, r: bool_to_cmp(is_balanced(Pair(l=l, r=r)))),
+        )
+    )
+
+    return (sorted_p.index(DIVIDER_A) + 1) * (sorted_p.index(DIVIDER_B) + 1)
 
 
 if __name__ == "__main__":
-    part1()
+    # case1_1 = part1("input.txt")
+    # print(f"case1_1={case1_1}")
+
+    case2_1 = part2("input.txt")
+    print(f"case2_1={case2_1}")
