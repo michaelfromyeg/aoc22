@@ -274,8 +274,8 @@ def part2(filename: str) -> None:
 
 
 if __name__ == "__main__":
-    # case1_1 = part1("input.txt")
-    # print(f"case1_1={case1_1}")
+    case1_1 = part1("input.txt")
+    print(f"case1_1={case1_1}")
 
     case2_1 = part2("input.txt")
     print(f"case2_1={case2_1}")
