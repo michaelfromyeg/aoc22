@@ -1,27 +1,93 @@
+from __future__ import annotations
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from copy import deepcopy
 
 DEBUG = True
 
-INPUT_TEST_EXPECTED = """0 ......+...
-1 ..........
-2 ..........
-3 ..........
-4 ....#...##
-5 ....#...#.
-6 ..###...#.
-7 ........#.
-8 ........#.
-9 #########."""
+INPUT_TEST_EXPECTED_BEFORE = """00 .......+....
+01 ............
+02 ............
+03 ............
+04 .....#...##.
+05 .....#...#..
+06 ...###...#..
+07 .........#..
+08 .........#..
+09 .#########..
+10 ............"""
+
+INPUT_TEST_EXPECTED_AFTER = """.......+...
+.......~...
+......~o...
+.....~ooo..
+....~#ooo##
+...~o#ooo#.
+..~###ooo#.
+..~..oooo#.
+.~o.ooooo#.
+~#########."""
 
 
-@dataclass(frozen=True)
+@dataclass()
 class Point:
     x: int
     y: int
 
+    def cmove_down(
+        self: Point, x_min: int, x_max: int, y_min: int, y_max: int, points: List[Point]
+    ) -> bool:
+        """
+        Move the particle down if possible.
+        """
+        # if self.y + 1 > y_max:
+        #     return False
+        if Point(x=self.x, y=self.y + 1) in points:
+            return False
 
+        self.y = self.y + 1
+        return True
+
+    def cmove_down_left(
+        self: Point, x_min: int, x_max: int, y_min: int, y_max: int, points: List[Point]
+    ) -> bool:
+        """
+        Move the particle down and left if possible.
+        """
+        # if self.y + 1 > y_max:
+        #     return False
+        # if self.x - 1 < x_min:
+        #     return False
+        if Point(x=self.x - 1, y=self.y + 1) in points:
+            return False
+
+        self.x, self.y = self.x - 1, self.y + 1
+        return True
+
+    def cmove_down_right(
+        self: Point, x_min: int, x_max: int, y_min: int, y_max: int, points: List[Point]
+    ) -> bool:
+        """
+        Move the particle down and right if possible.
+        """
+        # if self.y + 1 > y_max:
+        #     return False
+        # if self.x + 1 > x_max:
+        #     return False
+        if Point(x=self.x + 1, y=self.y + 1) in points:
+            return False
+
+        self.x, self.y = self.x + 1, self.y + 1
+        return True
+
+    def __eq__(self, __o: object) -> bool:
+        return self.x == __o.x and self.y == __o.y
+
+    def __hash__(self) -> int:
+        return hash((self.x, self.y))
+
+
+# TODO(michaelfromyeg): use this data type...
 @dataclass
 class Sand:
     posn: Point
@@ -33,6 +99,7 @@ ORIGIN_S = "+"
 
 AIR = "."
 ROCK = "#"
+SAND = "o"
 
 
 def parse_point(point_str: str) -> Point:
@@ -78,8 +145,29 @@ def parse_rocks(line: str) -> List[Point]:
     return list(set(expanded_points))
 
 
+def get_dimensions(rocks: List[Point]) -> Tuple[int, int, int, int]:
+    """
+    Determine visible portion of scan.
+    """
+    points = deepcopy(rocks)
+    points.append(ORIGIN)
+
+    xs = list(map(lambda points: points.x, points))
+    ys = list(map(lambda points: points.y, points))
+
+    x_min, x_max = min(*xs), max(*xs)
+    y_min, y_max = min(*ys), max(*ys)
+
+    return x_min - 1, x_max + 1, y_min, y_max + 1
+
+
 def build_grid(
-    x_min: int, x_max: int, y_min: int, y_max: int, rocks: List[Point]
+    x_min: int,
+    x_max: int,
+    y_min: int,
+    y_max: int,
+    rocks: List[Point],
+    sand: List[Point],
 ) -> List[List[str]]:
     """
     Build a dx by dy grid (of air).
@@ -93,6 +181,8 @@ def build_grid(
                 row.append(ROCK)
             elif Point(x=x, y=y) == ORIGIN:
                 row.append(ORIGIN_S)
+            elif Point(x=x, y=y) in sand:
+                row.append(SAND)
             else:
                 row.append(AIR)
         grid.append(row)
@@ -105,29 +195,72 @@ def draw_grid(grid: List[List[str]]) -> str:
     """
     picture = ""
     for i, row in enumerate(grid):
-        row.insert(0, f"{str(i)} ")
+        row.insert(0, f"{'0' + str(i) if i < 10 else str(i)} ")
         print("".join(row))
         picture += "".join(row) + "\n"
+
+    # Add a blank line
+    print()
 
     return picture[0 : len(picture) - 1]
 
 
-def draw_rocks(rocks: List[Point]) -> None:
+def draw_rocks_and_sand(sand: List[Point], rocks: List[Point]) -> None:
     """
     Draw the rock grid, for debugging.
     """
-    points = deepcopy(rocks)
-    points.append(ORIGIN)
+    x_min, x_max, y_min, y_max = get_dimensions(rocks=rocks)
 
-    xs = list(map(lambda points: points.x, points))
-    ys = list(map(lambda points: points.y, points))
-
-    x_min, x_max = min(*xs), max(*xs)
-    y_min, y_max = min(*ys), max(*ys)
-
-    grid = build_grid(x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max, rocks=rocks)
+    grid = build_grid(
+        x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max, rocks=rocks, sand=sand
+    )
 
     return draw_grid(grid)
+
+
+def next_sand(sand: List[Point], rocks: List[Point]) -> int:
+    """
+    Try and move all sand, create a new piece of sand.
+
+    If sand state is identical, remove sand.
+
+    Modifies sand array.
+    """
+    x_min, x_max, y_min, y_max = get_dimensions(rocks=rocks)
+
+    # First, create a new piece of sand, if it doesn't exist
+    if ORIGIN not in sand:
+        sand.append(Point(x=ORIGIN.x, y=ORIGIN.y))
+
+    # Let's loop through sand in reverse order
+    at_rest = 0
+    for i in range(len(sand) - 1, -1, -1):
+        particle = sand[i]
+
+        all_points = deepcopy(rocks)
+        all_points.extend(sand)
+
+        try_down = particle.cmove_down(
+            x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max, points=all_points
+        )
+        if not try_down:
+            try_down_left = particle.cmove_down_left(
+                x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max, points=all_points
+            )
+            if not try_down_left:
+                try_down_right = particle.cmove_down_right(
+                    x_min=x_min,
+                    x_max=x_max,
+                    y_min=y_min,
+                    y_max=y_max,
+                    points=all_points,
+                )
+                if not try_down_right:
+                    at_rest = at_rest + 1
+
+        sand[i] = particle
+
+    return at_rest
 
 
 def part1(filename: str) -> int:
@@ -146,14 +279,32 @@ def part1(filename: str) -> int:
             if line:
                 rocks.extend(parse_rocks(line))
 
-    picture = draw_rocks(rocks)
-    if DEBUG:
-        assert picture == INPUT_TEST_EXPECTED
+    picture = draw_rocks_and_sand(sand=[], rocks=rocks)
 
-    return 0
+    if DEBUG:
+        assert picture == INPUT_TEST_EXPECTED_BEFORE
+
+    s = []
+    o = 0
+    while True:
+        n = next_sand(sand=s, rocks=rocks)
+
+        draw_rocks_and_sand(sand=s, rocks=rocks)
+
+        if o >= 24 and o == n:
+            break
+        else:
+            o = n
+
+    picture2 = draw_rocks_and_sand(sand=s, rocks=rocks)
+    if DEBUG:
+        assert picture2 == INPUT_TEST_EXPECTED_AFTER
+
+    return len(s)
 
 
 if __name__ == "__main__":
     retval = part1("input-test.txt" if DEBUG else "input.txt")
+
     if DEBUG:
         assert retval == 24
